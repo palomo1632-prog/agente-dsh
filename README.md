@@ -21,12 +21,12 @@ con el plugin de Telegram (fork con mejoras en español incluido en este repo).
 | Un VPS (2 GB RAM alcanzan; probado en Ubuntu 24.04) | donde vive el agente |
 | Un agente de código en tu PC con acceso SSH a ese VPS | quien hace la instalación |
 | Un bot de Telegram ([@BotFather](https://t.me/BotFather) → `/newbot`) | el token del bot |
-| Una API key de [DeepSeek](https://platform.deepseek.com) | el cerebro del agente |
+| Una API key de [DeepSeek](https://platform.deepseek.com) *(sugerido)* | el cerebro del agente — **podés usar el proveedor que quieras** (ChatGPT, Claude, modelos locales…); adaptarlo es hiper sencillo y lo hace tu agente en pocas líneas ([docs/proveedores.md](docs/proveedores.md)) |
 
 ## Instalación en 3 pasos
 
 1. **Cloná este repo en tu PC** (o descargalo como ZIP y descomprimilo).
-2. **Le pedís esto a tu agente de código** (Claude Code, Codex, ZCode, el que uses):
+2. **Le pedís esto a tu agente de código** (DeepSeek Harness, Claude Code, Codex, ZCode, el que uses):
 
    > Leé `INSTALL-PROMPT.md` de esta carpeta y seguí las instrucciones al pie de la
    > letra para instalar Agente DSH en mi VPS. Te voy pasando el token del bot y la
