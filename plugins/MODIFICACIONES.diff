@@ -1,0 +1,1091 @@
+Only in stock/package: cordis.patch.yml
+diff -ru stock/package/lib/client.js fork/lib/client.js
+--- stock/package/lib/client.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/client.js	2026-10-07 02:00:32.173930198 +0000
+@@ -801,7 +801,7 @@
+ // src/client/index.tsx
+ var import_jsx_runtime3 = require("react/jsx-runtime");
+ var name = "@sympoies/dsh-telegram";
+-var inject = ["slots", "locale", "settingsScope"];
++var inject = ["slots", "locale"];
+ var NAMESPACE = "telegram";
+ var NAV_ORDER = 61;
+ function apply(ctx) {
+@@ -809,12 +809,18 @@
+     ctx.locale.register(NAMESPACE, locales);
+   }, "dsh-telegram: locales");
+   const translate = ctx.locale.bind(NAMESPACE);
+-  const scope = ctx.settingsScope.bind({ namespace: NAMESPACE });
++  // DSH 0.2.0 removed the client `settingsScope` service. Read it through
++  // ctx.get (a missing service on the proxy THROWS) and carry on without the
++  // plugin's own settings section when it is gone: the harness's own settings
++  // page edits this plugin's fields from its Config schema.
++  const settingsScope = typeof ctx.get === "function" ? ctx.get("settingsScope") : undefined;
++  const scope = settingsScope?.bind ? settingsScope.bind({ namespace: NAMESPACE }) : undefined;
+   const connection = ctx.get("connection");
+   const Section2 = function TelegramSection() {
+     if (!connection) return null;
+     return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(TelegramPanel, { scope, remote: connection.api, t: translate });
+   };
++  if (!scope) return;
+   ctx.slots.inject(
+     "settings.section",
+     () => ctx.slots.register(
+diff -ru stock/package/lib/commands.js fork/lib/commands.js
+--- stock/package/lib/commands.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/commands.js	2026-10-07 02:00:32.174930232 +0000
+@@ -11,21 +11,23 @@
+ const MAX_MENU_DESCRIPTION = 256;
+ /** Commands the plugin answers, with the one-line help shown by `/help`. */
+ export const COMMANDS = {
+-    start: 'Show what this bot is and whether you may use it',
+-    help: 'List the commands',
+-    claim: 'Take ownership of an unclaimed bot: /claim <code>',
+-    new: 'Start a fresh conversation, forgetting the current one',
+-    cd: 'Show or change the working directory: /cd ~/projects/app',
+-    model: 'Show or change the model: /model list, or /model provider/model',
+-    effort: 'Show or change the reasoning effort: /effort high',
+-    vision: 'Show or change the model that reads images: /vision off',
+-    permission: 'Show or change what the agent may do: /permission read-only',
+-    diag: 'Show what the plugin can see about itself, and recent failures',
+-    screenshot: "Send a picture of the harness machine's screen",
+-    sessions: 'Pick up an earlier conversation from this chat',
+-    status: 'Show the session, working directory, and who owns the bot',
+-    stop: 'Cancel whatever the agent is doing right now',
+-    whoami: 'Show your Telegram user id',
++    start: 'Mostrar qué es este bot y si podés usarlo',
++    help: 'Listar los comandos',
++    compact: 'Resumir la conversación vieja para liberar espacio',
++    goal: 'Fijar o ver el objetivo de una tarea larga (clear, pause, resume)',
++    claim: 'Tomar el control del bot: /claim CODIGO',
++    new: 'Empezar una conversación nueva, olvidando la actual',
++    cd: 'Ver o cambiar la carpeta de trabajo: /cd ~/proyectos/app',
++    model: 'Ver o cambiar el modelo: /model list, o /model proveedor/modelo',
++    effort: 'Ver o cambiar cuánto piensa antes de responder: /effort high',
++    vision: 'Ver o cambiar el modelo que lee imágenes: /vision off',
++    permission: 'Ver o cambiar lo que el agente puede hacer: /permission read-only',
++    diag: 'Mostrar qué ve el plugin de sí mismo y las fallas recientes',
++    screenshot: 'Mandar una foto de la pantalla de la máquina',
++    sessions: 'Retomar una conversación anterior de este chat',
++    status: 'Mostrar la sesión, la carpeta y quién es el dueño del bot',
++    stop: 'Cancelar lo que el agente esté haciendo ahora',
++    whoami: 'Mostrar tu id de usuario de Telegram',
+ };
+ /**
+  * Parse a message as a command.
+diff -ru stock/package/lib/harness/questions-seam.js fork/lib/harness/questions-seam.js
+--- stock/package/lib/harness/questions-seam.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/harness/questions-seam.js	2026-10-07 02:00:32.181930471 +0000
+@@ -1,45 +1,38 @@
+ /**
+- * Taking over the single user-questions provider without stealing it.
++ * Taking over the user-questions waterfall without stealing it.
+  *
+- * `ctx.userQuestions` accepts exactly one provider and throws
+- * `DUPLICATE_PROVIDER` on a second registration. In a profile that also runs
+- * the web app, the browser has already claimed that slot — so a naive
+- * registration here would either fail to load or, worse, silently take every
+- * question away from the browser.
++ * DSH 0.1.6 exposed `ctx.userQuestions` as a single-provider slot, and this seam
++ * used to displace the incumbent through `registerProvider`. DSH 0.2.0 removed
++ * that API: `UserQuestionService` now dispatches a Cordis waterfall on
++ * `user-questions/request`, scoped to the asking agent, and every UI registers
++ * its own listener. `registerProvider` no longer exists, so the old code threw
++ * `TypeError: service.registerProvider is not a function` while installing —
++ * silently leaving Telegram with no answerer at all, which made every
++ * `ask_user_question` wait forever for a UI nobody was looking at.
+  *
+- * Instead this seam swaps itself in and keeps the displaced provider as a
+- * fallback, so a question belonging to a browser session is forwarded straight
+- * back to it. Both surfaces keep working, and whichever one the user is
+- * actually looking at is the one that answers.
++ * The waterfall is the same mechanism the approval path in this plugin already
++ * uses, so the same arrangement applies here: register with `prepend` so the
++ * chat is offered the request before the web UI's forwarder (which claims any
++ * connected browser session), and delegate with `next()` when the asking session
++ * is not bound to a Telegram chat. Both surfaces keep working, and whichever one
++ * the user is actually looking at answers.
+  *
+- * On unload the previous provider is put back, so unloading this plugin
+- * restores exactly the arrangement that existed before it loaded.
++ * Cordis admits an untagged listener to every scoped dispatch, and a listener
++ * owned by an enclosing scope receives each descendant scope's events — which is
++ * why a listener registered here sees agent-scoped requests.
+  */
+ /**
+- * Install a provider as the active one, chaining any incumbent.
++ * Install the question handler on the waterfall.
+  *
+- * @param service - the live `ctx.userQuestions` service.
+- * @param build - builds the provider, given the incumbent to delegate to.
++ * @param scope - the plugin's context, carrying `userQuestions`.
++ * @param handle - decides per request: returns the answer, or delegates by
++ *   calling the supplied `next`.
+  * @param logger - records which arrangement was chosen.
++ * @returns a disposable that removes the listener again.
+  */
+-export function installQuestionProvider(service, build, logger) {
+-    const previous = service.provider;
+-    if (previous === undefined) {
+-        const dispose = service.registerProvider(build(undefined));
+-        logger?.info('[dsh-telegram] answering the agent\'s questions in Telegram');
+-        return { previous: undefined, restore: dispose };
+-    }
+-    // Clearing the slot before re-registering is what makes the takeover
+-    // possible; registerProvider refuses while one is present.
+-    service.provider = undefined;
+-    const dispose = service.registerProvider(build(previous));
+-    logger?.info('[dsh-telegram] answering questions in Telegram, forwarding other sessions to the existing UI');
+-    return {
+-        previous,
+-        restore() {
+-            dispose();
+-            service.provider = previous;
+-        },
+-    };
++export function installQuestionProvider(scope, handle, logger) {
++    const dispose = scope.on('user-questions/request', handle, { prepend: true });
++    logger?.info('[dsh-telegram] answering the agent\'s questions in Telegram (0.2.0 waterfall), forwarding other sessions to the existing UI');
++    return { restore: dispose };
+ }
+-//# sourceMappingURL=questions-seam.js.map
+\ No newline at end of file
++//# sourceMappingURL=questions-seam.js.map
+diff -ru stock/package/lib/index.js fork/lib/index.js
+--- stock/package/lib/index.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/index.js	2026-10-07 02:00:32.169930062 +0000
+@@ -130,6 +130,15 @@
+             // A configuration surface that cannot bind must never take the bot
+             // offline with it — the connection is the point, the settings page is a
+             // convenience — so a failed registration is reported and stepped over.
++            // DSH 0.2.0 removed the imperative settings.register: SettingsForms
++            // projects every profile entry's Config schema into a form on its own
++            // and writes an edit back through the loader, so there is no namespace
++            // handle to hold or watch here — and the fields stay editable in
++            // Settings without a custom page. (Older harnesses keep the path below.)
++            if (typeof settings.register !== 'function') {
++                logger.info('[dsh-telegram] settings are owned by the harness form (dsh 0.2.0 API)');
++                return () => undefined;
++            }
+             let bound;
+             try {
+                 bound = settings.register(SETTINGS_NAMESPACE, Config, { base: config });
+@@ -179,7 +188,7 @@
+     const token = await resolveToken(ctx, config.tokenRef);
+     if (!token) {
+         const detail = `credential "${config.tokenRef}" is not set. ` +
+-            'Create a bot with @BotFather and store its token under that reference.';
++            'Creá un bot con @BotFather y guardá su token en esa referencia.';
+         logger.warn(`[dsh-telegram] ${detail} The bot is idle.`);
+         await status.publish('idle', { detail });
+         return;
+@@ -405,7 +414,7 @@
+                 timeoutMs: speech.timeoutMs,
+                 signal,
+             })
+-            : { transcribe: async () => ({ kind: 'failure', notice: 'Speech recognition is not configured.' }) }
++            : { transcribe: async () => ({ kind: 'failure', notice: 'El reconocimiento de voz no está configurado.' }) }
+         : undefined;
+     const sessionPicker = new SessionPicker({
+         surface,
+@@ -440,20 +449,42 @@
+         questions,
+         approvals,
+         recovery,
++        // Los comandos del harness (/compact, /goal, ...) no son de este plugin:
++        // se le pasan al registro de comandos del agente y se contesta lo que diga.
++        harnessCommand: async (target, line) => {
++            const commands = ctx.get('commands');
++            if (commands === undefined || typeof commands.execute !== 'function') {
++                logger.warn('[dsh-telegram] no harness command registry is available');
++                return undefined;
++            }
++            // runner.agentFor devuelve un envoltorio plano (sessionId/followup/cancel);
++            // el registro de comandos está indexado por el agente del harness, así que
++            // se resuelve ESE objeto desde su registro, después de asegurar que esté vivo.
++            const running = await runner.agentFor(target);
++            const agent = running === undefined ? undefined : ctx.agents.get(running.sessionId);
++            if (agent === undefined) {
++                logger.warn(`[dsh-telegram] ${line.split(' ')[0]}: no hay agente vivo para esta conversación`);
++                return undefined;
++            }
++            const settled = await commands.execute(agent, line, [], new AbortController().signal);
++            if (settled === undefined)
++                logger.warn(`[dsh-telegram] el harness no conoce el comando ${line.split(' ')[0]}`);
++            return settled?.result;
++        },
+         modelSees,
+         ...(catalog
+             ? {
+                 vision: {
+                     describe: (target) => {
+                         if (chosenVision.forChat(target) === VISION_OFF)
+-                            return 'nothing — the conversation itself';
+-                        return formatRoute(visionRouteFor(target)) === 'the deployment default'
+-                            ? 'nothing configured'
++                            return 'nada — la conversación misma';
++                        return formatRoute(visionRouteFor(target)) === 'el valor por defecto'
++                            ? 'nada configurado'
+                             : formatRoute(visionRouteFor(target));
+                     },
+                     origin: (target) => chosenVision.forChat(target) === undefined
+                         ? undefined
+-                        : `this chat; the deployment default is ${config.media.visionModel || 'nothing configured'}`,
++                        : `este chat; el valor por defecto es ${config.media.visionModel || 'nada configurado'}`,
+                     async choose(target, input) {
+                         const providers = await listCatalog(catalog).catch(() => []);
+                         const matched = matchRoute(input, providers);
+@@ -478,22 +509,22 @@
+                         { label: 'Bot', value: me.username ? `@${me.username}` : String(me.id) },
+                         { label: 'Plugin', value: await describeVersion(versions, PACKAGE_NAME, PLUGIN_VERSION) },
+                         {
+-                            label: 'Harness',
++                            label: 'Sistema',
+                             value: await describeVersion(versions, '@deepseek-ai/dsh', harnessVersion()),
+                         },
+-                        { label: 'Uptime', value: formatUptime(uptime) },
+-                        { label: 'Streaming', value: config.streaming.enabled ? 'on' : 'off' },
+-                        { label: 'Attachments', value: config.media.enabled ? 'on' : 'off' },
+-                        { label: 'Screenshots', value: config.screenshot.enabled ? 'on' : 'off' },
++                        { label: 'Encendido hace', value: formatUptime(uptime) },
++                        { label: 'Respuesta en vivo', value: config.streaming.enabled ? 'sí' : 'no' },
++                        { label: 'Adjuntos', value: config.media.enabled ? 'sí' : 'no' },
++                        { label: 'Capturas', value: config.screenshot.enabled ? 'sí' : 'no' },
+                         {
+-                            label: 'OCR fallback',
++                            label: 'OCR',
+                             value: ocr === undefined
+-                                ? 'off'
++                                ? 'no'
+                                 : (await ocr.available())
+                                     ? `tesseract, ${config.media.ocr.languages}`
+-                                    : 'on, but tesseract is not installed',
++                                    : 'activado, pero falta tesseract',
+                         },
+-                        { label: 'Groups', value: config.requireMentionInGroups ? 'mention required' : 'open' },
++                        { label: 'Grupos', value: config.requireMentionInGroups ? 'hay que mencionarlo' : 'abierto' },
+                     ],
+                     seams: seamReport(),
+                     failures: failures.recent(),
+@@ -506,14 +537,14 @@
+                     async send(target) {
+                         const shot = await screenshotter.take();
+                         if (shot.kind === 'unsupported') {
+-                            return `Screenshots are not supported on ${shot.platform} yet.`;
++                            return `Las capturas todavía no funcionan en ${shot.platform}.`;
+                         }
+                         if (shot.kind === 'failed') {
+                             return shot.reason === 'the harness has no Screen Recording permission'
+-                                ? 'macOS has not given the harness Screen Recording permission. ' +
+-                                    'Grant it in System Settings → Privacy & Security → Screen Recording, ' +
+-                                    'then restart the harness.'
+-                                : `The screenshot failed: ${shot.reason}`;
++                                ? 'macOS no le dio permiso de grabación de pantalla al sistema. ' +
++                                    'Dalo en Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla, ' +
++                                    'y reiniciá el bot.'
++                                : `La captura falló: ${shot.reason}`;
+                         }
+                         // Over the photo limit it goes as a document, which Telegram
+                         // takes up to 50 MB. A large display's PNG routinely is.
+@@ -533,10 +564,10 @@
+         ...(permission.available
+             ? {
+                 permission: {
+-                    describe: (target) => chosenPermissions.forChat(target) ?? (config.permissionPreset || 'the deployment default'),
++                    describe: (target) => chosenPermissions.forChat(target) ?? (config.permissionPreset || 'el valor por defecto'),
+                     origin: (target) => chosenPermissions.forChat(target) === undefined
+                         ? undefined
+-                        : `this chat; otherwise ${config.permissionPreset || 'the deployment default'}`,
++                        : `este chat; si no, ${config.permissionPreset || 'el valor por defecto'}`,
+                     options: () => permission.names,
+                     async choose(target, input) {
+                         const matched = matchPreset(input, permission.names);
+@@ -562,10 +593,10 @@
+         ...(catalog
+             ? {
+                 effort: {
+-                    describe: (target) => chosenEfforts.forChat(target) ?? "the model's own default",
++                    describe: (target) => chosenEfforts.forChat(target) ?? "el valor propio del modelo",
+                     origin: (target) => chosenEfforts.forChat(target) === undefined
+                         ? undefined
+-                        : "this chat; otherwise the model's own default",
++                        : "este chat; si no, el valor propio del modelo",
+                     model: (target) => formatRoute(chosenRoute(target) ?? selectModel(ctx, logger)),
+                     async options(target) {
+                         const reasoning = await effortsFor(catalog, chosenRoute(target) ?? selectModel(ctx, logger));
+@@ -713,9 +744,9 @@
+     }));
+ }
+ /**
+- * Install the questions provider, chaining any incumbent. Absent on a profile
+- * that does not load the seam, in which case questions simply stay a web-only
+- * feature rather than breaking the plugin.
++ * Install the question handler on the user-questions waterfall. Absent on a
++ * profile that does not load the seam, in which case questions simply stay a
++ * web-only feature rather than breaking the plugin.
+  */
+ function installQuestions(ctx, provider, logger) {
+     const fiber = ctx.inject(['userQuestions'], (scope) => {
+@@ -723,10 +754,11 @@
+         if (!service)
+             return;
+         scope.effect(() => {
+-            const seam = installQuestionProvider(service, (previous) => {
+-                if (previous)
+-                    provider.setFallback(previous);
+-                return provider;
++            const seam = installQuestionProvider(scope, (request, next) => {
++                const sessionId = request?.agent?.session?.id ?? request?.agent?.id;
++                if (!provider.handles(sessionId))
++                    return next();
++                return provider.ask(request);
+             }, logger);
+             return () => seam.restore();
+         }, 'dsh-telegram: user-questions provider');
+@@ -794,17 +826,17 @@
+         describe: (target) => formatRoute(options.chosen(target) ?? options.fallback()),
+         origin: (target) => options.stored(target) === undefined
+             ? undefined
+-            : `this chat; the deployment default is ${formatRoute(options.fallback())}`,
++            : `este chat; el valor por defecto es ${formatRoute(options.fallback())}`,
+         async list() {
+             let providers;
+             try {
+                 providers = await listCatalog(options.catalog);
+             }
+             catch {
+-                return 'Could not read the configured models.';
++                return 'No pude leer los modelos configurados.';
+             }
+             if (providers.length === 0)
+-                return 'No models are configured. Add one in Settings → Models.';
++                return 'No hay modelos configurados. Agregá uno en Ajustes → Modelos.';
+             return providers
+                 .map((provider) => {
+                 const rows = provider.models
+diff -ru stock/package/lib/interact/approvals.js fork/lib/interact/approvals.js
+--- stock/package/lib/interact/approvals.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/interact/approvals.js	2026-10-07 02:00:32.188930710 +0000
+@@ -25,8 +25,8 @@
+ const REASON_BUDGET = 2600;
+ /** Button order, and the outcome each press produces. */
+ const CHOICES = [
+-    { text: '✅ Allow once', outcome: 'allowed-once' },
+-    { text: '⛔ Reject', outcome: 'rejected' },
++    { text: '✅ Permitir una vez', outcome: 'allowed-once' },
++    { text: '⛔ Rechazar', outcome: 'rejected' },
+ ];
+ export class TelegramApprovalAnswerer {
+     options;
+diff -ru stock/package/lib/interact/questions.js fork/lib/interact/questions.js
+--- stock/package/lib/interact/questions.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/interact/questions.js	2026-10-07 02:00:32.187930676 +0000
+@@ -76,6 +76,20 @@
+         this.fallback = provider;
+     }
+     /**
++     * Whether this provider owns the chat a session is bound to.
++     *
++     * DSH 0.2.0 routes questions through a Cordis waterfall instead of a single
++     * provider slot, so the seam asks this before claiming a request: a session
++     * with a Telegram chat is answered here, anything else falls through to the
++     * next listener (the web UI).
++     *
++     * @param sessionId - the asking session's id.
++     * @returns true when a Telegram chat is bound to that session.
++     */
++    handles(sessionId) {
++        return sessionId !== undefined && this.options.targetOf(sessionId) !== undefined;
++    }
++    /**
+      * Ask the human, one question at a time.
+      *
+      * @param request - the questions, the owning agent, and the agent's signal.
+@@ -124,7 +138,7 @@
+         for (;;) {
+             const waiter = this.options.pending.open({
+                 ...(signal ? { signal } : {}),
+-                onCancel: () => void this.retire(target, messageId, question, 'Cancelled.'),
++                onCancel: () => void this.retire(target, messageId, question, 'Cancelado.'),
+             });
+             const html = renderPrompt(question, selected);
+             const keyboard = buildKeyboard(question, selected, waiter.token);
+@@ -232,10 +246,10 @@
+         },
+     ]);
+     if (question.multiSelect) {
+-        rows.push([{ text: '✅ Done', callbackData: `${KIND}:${token}:${DONE_INDEX}` }]);
++        rows.push([{ text: '✅ Listo', callbackData: `${KIND}:${token}:${DONE_INDEX}` }]);
+     }
+     else {
+-        rows.push([{ text: '✏️ Other…', callbackData: `${KIND}:${token}:${OTHER_INDEX}` }]);
++        rows.push([{ text: '✏️ Otro…', callbackData: `${KIND}:${token}:${OTHER_INDEX}` }]);
+     }
+     return rows;
+ }
+@@ -250,6 +264,6 @@
+ }
+ /** Human summary of what was chosen, for the retired prompt. */
+ function summary(labels) {
+-    return labels.length === 0 ? 'Answered: nothing selected' : `Answered: ${labels.join(', ')}`;
++    return labels.length === 0 ? 'Respondido: no elegiste nada' : `Respondido: ${labels.join(', ')}`;
+ }
+ //# sourceMappingURL=questions.js.map
+\ No newline at end of file
+diff -ru stock/package/lib/media/collect.js fork/lib/media/collect.js
+--- stock/package/lib/media/collect.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/media/collect.js	2026-10-07 02:00:32.177930335 +0000
+@@ -31,7 +31,7 @@
+             return { parts: said ? [{ type: 'text', text: said }] : [] };
+         }
+         if (item.kind === 'unsupported') {
+-            const what = item.describedAs ?? 'a file';
++            const what = item.describedAs ?? 'un archivo';
+             return this.declined(said, `${what}, which cannot be read`, `I can't read ${what}.`);
+         }
+         if (item.size !== undefined && item.size > this.options.maxBytes) {
+@@ -52,7 +52,7 @@
+             if (item.kind === 'text') {
+                 const bytes = await this.download(item.fileId);
+                 const text = decodeText(bytes, this.options.maxTextChars);
+-                const name = item.name ?? 'attachment';
++                const name = item.name ?? 'adjunto';
+                 return {
+                     parts: [
+                         { type: 'text', text: `${said ? `${said}\n\n` : ''}File \`${name}\`:\n\n${text}` },
+@@ -60,11 +60,11 @@
+                 };
+             }
+             if (!this.options.attachments) {
+-                return this.declined(said, 'an image, but this deployment stores none', 'This deployment cannot store images.');
++                return this.declined(said, 'una imagen, pero esta instalación no guarda imágenes', 'Esta instalación no guarda imágenes.');
+             }
+             if (!isStorableImage(item.mediaType)) {
+                 const type = item.mediaType ?? 'unknown';
+-                return this.declined(said, `an image of type ${type}, which cannot be stored`, `Images of type ${type} cannot be stored. PNG, JPEG, WebP and GIF work.`);
++                return this.declined(said, `una imagen de tipo ${type}, que no se puede guardar`, `Las imágenes de tipo ${type} no se pueden guardar. Sirven PNG, JPEG, WebP y GIF.`);
+             }
+             const stored = await this.storeImage(item);
+             if (!stored) {
+@@ -73,8 +73,8 @@
+                 // and it is the full-resolution original.
+                 const limits = this.options.attachments.imageLimits;
+                 const explanation = describeSize(largest(item.candidates), limits) ??
+-                    'That image is larger than this harness stores.';
+-                return this.declined(said, 'an image too large for this harness to store, so it was left out', `${explanation} Sending it as a photo rather than as a file lets Telegram offer a smaller copy.`);
++                    'Esa imagen es más grande de lo que esta instalación guarda.';
++                return this.declined(said, 'una imagen demasiado grande para guardar, así que quedó afuera', `${explanation} Mandala como foto (y no como archivo) para que Telegram ofrezca una copia más chica.`);
+             }
+             // Text first: it is what the user asked, and the image is its subject.
+             const parts = [];
+@@ -86,7 +86,7 @@
+         catch (error) {
+             this.logger.warn('[dsh-telegram] could not read an attachment', error);
+             const reason = error instanceof Error ? error.message : String(error);
+-            return this.declined(said, `a file that could not be read: ${reason}`, `That file could not be read: ${reason}`);
++            return this.declined(said, `un archivo que no se pudo leer: ${reason}`, `No se pudo leer ese archivo: ${reason}`);
+         }
+     }
+     /**
+diff -ru stock/package/lib/media/extractor.js fork/lib/media/extractor.js
+--- stock/package/lib/media/extractor.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/media/extractor.js	2026-10-07 02:00:32.177930335 +0000
+@@ -81,7 +81,7 @@
+             {
+                 type: 'text',
+                 text: route === undefined
+-                    ? '(The user sent an image, but nothing here can read one. Configure a vision model in Settings → Telegram, or install tesseract.)'
++                    ? '(El usuario mandó una imagen, pero acá nada puede leerla. Configurá un modelo de visión en Ajustes → Telegram, o instalá tesseract.)'
+                     : `(The user sent an image, but it could not be read by ${route.model}.)`,
+             },
+         ];
+diff -ru stock/package/lib/media/ocr.js fork/lib/media/ocr.js
+--- stock/package/lib/media/ocr.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/media/ocr.js	2026-10-07 02:00:32.178930369 +0000
+@@ -114,9 +114,9 @@
+  * it gets wrong.
+  */
+ export function labelOcr(text) {
+-    return ('Text read from the image by OCR. No vision model is configured, so ' +
+-        'nothing has described the picture itself and the reading may contain ' +
+-        'mistakes — treat exact figures with care:\n\n' +
++    return ('Texto leído de la imagen por OCR. No hay modelo de visión configurado, así que ' +
++            'nadie describió la imagen en sí y la lectura puede tener errores ' +
++            '— tratá los números exactos con cuidado:\n\n' +
+         text);
+ }
+ /** Collapse the ragged whitespace OCR leaves between columns and lines. */
+diff -ru stock/package/lib/media/voice.js fork/lib/media/voice.js
+--- stock/package/lib/media/voice.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/media/voice.js	2026-10-07 02:00:32.178930369 +0000
+@@ -23,24 +23,24 @@
+     }
+     async transcribe(voice) {
+         if (!isSafeSpeechEndpoint(this.options.endpoint)) {
+-            return { kind: 'failure', notice: 'Speech recognition is not configured.' };
++            return { kind: 'failure', notice: 'El reconocimiento de voz no está configurado.' };
+         }
+         if (voice.duration !== undefined && voice.duration > this.options.maxSeconds) {
+-            return { kind: 'failure', notice: 'That voice note is too long to transcribe.' };
++            return { kind: 'failure', notice: 'Esa nota de voz es demasiado larga para transcribir.' };
+         }
+         if (voice.file_size !== undefined && voice.file_size > this.options.maxBytes) {
+-            return { kind: 'failure', notice: 'That voice note is too large to transcribe.' };
++            return { kind: 'failure', notice: 'Esa nota de voz es demasiado grande para transcribir.' };
+         }
+         try {
+             const file = await this.options.source.getFile(voice.file_id);
+             if (!file.file_path)
+-                return { kind: 'failure', notice: 'Telegram did not provide the voice file.' };
++                return { kind: 'failure', notice: 'Telegram no entregó el archivo de voz.' };
+             if (file.file_size !== undefined && file.file_size > this.options.maxBytes) {
+-                return { kind: 'failure', notice: 'That voice note is too large to transcribe.' };
++                return { kind: 'failure', notice: 'Esa nota de voz es demasiado grande para transcribir.' };
+             }
+             const bytes = await this.options.source.downloadFile(file.file_path, this.options.signal);
+             if (bytes.length === 0 || bytes.length > this.options.maxBytes) {
+-                return { kind: 'failure', notice: 'That voice note is empty or too large to transcribe.' };
++                return { kind: 'failure', notice: 'Esa nota de voz está vacía o es demasiado grande para transcribir.' };
+             }
+             const deadline = AbortSignal.timeout(this.options.timeoutMs);
+             const signal = this.options.signal
+@@ -57,21 +57,21 @@
+                 redirect: 'error',
+             });
+             if (response.status === 429) {
+-                return { kind: 'failure', notice: 'Speech recognition is busy. Please try again.' };
++                return { kind: 'failure', notice: 'El reconocimiento de voz está ocupado. Probá de nuevo.' };
+             }
+             if (response.status === 413 || response.status === 422) {
+-                return { kind: 'failure', notice: 'That voice note could not be transcribed.' };
++                return { kind: 'failure', notice: 'No se pudo transcribir esa nota de voz.' };
+             }
+             if (!response.ok) {
+-                return { kind: 'failure', notice: 'Speech recognition is unavailable. Please try again.' };
++                return { kind: 'failure', notice: 'El reconocimiento de voz no está disponible. Probá de nuevo.' };
+             }
+             const declaredLength = Number(response.headers.get('content-length'));
+             if (declaredLength > MAX_RESPONSE_BYTES) {
+-                return { kind: 'failure', notice: 'Speech recognition returned too much text.' };
++                return { kind: 'failure', notice: 'El reconocimiento de voz devolvió demasiado texto.' };
+             }
+             const reader = response.body?.getReader();
+             if (!reader)
+-                return { kind: 'failure', notice: 'Speech recognition returned no text.' };
++                return { kind: 'failure', notice: 'El reconocimiento de voz no devolvió texto.' };
+             const chunks = [];
+             let size = 0;
+             while (true) {
+@@ -81,7 +81,7 @@
+                 size += value.byteLength;
+                 if (size > MAX_RESPONSE_BYTES) {
+                     await reader.cancel();
+-                    return { kind: 'failure', notice: 'Speech recognition returned too much text.' };
++                    return { kind: 'failure', notice: 'El reconocimiento de voz devolvió demasiado texto.' };
+                 }
+                 chunks.push(value);
+             }
+@@ -91,15 +91,15 @@
+                 ? payload.text.trim()
+                 : '';
+             if (text.length > MAX_TRANSCRIPT_CHARS) {
+-                return { kind: 'failure', notice: 'Speech recognition returned too much text.' };
++                return { kind: 'failure', notice: 'El reconocimiento de voz devolvió demasiado texto.' };
+             }
+             return text
+                 ? { kind: 'success', text }
+-                : { kind: 'failure', notice: 'No speech was recognized. Please try again.' };
++                : { kind: 'failure', notice: 'No se reconoció voz. Probá de nuevo.' };
+         }
+         catch {
+             // Fetch errors may include the URL or headers. Neither belongs in chat or logs.
+-            return { kind: 'failure', notice: 'Speech recognition is unavailable. Please try again.' };
++            return { kind: 'failure', notice: 'El reconocimiento de voz no está disponible. Probá de nuevo.' };
+         }
+     }
+ }
+diff -ru stock/package/lib/router.js fork/lib/router.js
+--- stock/package/lib/router.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/router.js	2026-10-07 02:00:32.175930267 +0000
+@@ -160,12 +160,12 @@
+         }
+         if (!carriesMedia) {
+             if (text === undefined) {
+-                return await this.say(target, 'I can read text, images, and text files.');
++                return await this.say(target, 'Puedo leer texto, imágenes y archivos de texto.');
+             }
+             return await this.runPrompt(target, [{ type: 'text', text }]);
+         }
+         if (!this.options.media) {
+-            return await this.say(target, 'This bot is not set up to read attachments.');
++            return await this.say(target, 'Este bot no está configurado para leer adjuntos.');
+         }
+         // An album arrives as several updates sharing one id, with the caption on
+         // exactly one of them. Held rather than answered, and delivered as a whole
+@@ -217,7 +217,7 @@
+         }
+         catch (error) {
+             this.logger.error('[dsh-telegram] could not read an album', error);
+-            await this.say(target, '⚠️ Those files could not be read.');
++            await this.say(target, '⚠️ No se pudieron leer esos archivos.');
+         }
+         finally {
+             release?.();
+@@ -232,29 +232,29 @@
+         if (decision === 'unclaimed' && command?.name === 'claim') {
+             const claimed = await this.options.access.claim(userId, command.args);
+             return await this.say(target, claimed
+-                ? '✅ Claimed. This bot now answers to you alone.'
+-                : '❌ That claim code is not right.');
++                ? '✅ Listo. Ahora este bot te responde sólo a vos.'
++                : '❌ Ese código no es correcto.');
+         }
+         if (decision === 'unclaimed') {
+-            return await this.say(target, 'This bot has no owner yet.\nRun <code>/claim &lt;code&gt;</code> with the code printed in the harness console.');
++            return await this.say(target, 'Este bot todavía no tiene dueño.\nMandá <code>/claim CODIGO</code> con el código que aparece en la consola del server.');
+         }
+         this.logger.warn(`[dsh-telegram] refused a message from user ${userId}`);
+-        await this.say(target, '⛔ You are not allowed to use this bot.');
++        await this.say(target, '⛔ No estás autorizado a usar este bot.');
+     }
+     /** Run one command. */
+     async onCommand(target, userId, name, args) {
+         switch (name) {
+             case 'start':
+-                return await this.say(target, `👋 Connected to DeepSeek Harness.\nSend a message to talk to the agent.\n\n${helpText()}`);
++                return await this.say(target, `👋 Conectado a DeepSeek Harness.\nMandá un mensaje para hablar con el agente.\n\n${helpText()}`);
+             case 'help':
+                 return await this.say(target, helpText());
+             case 'claim':
+-                return await this.say(target, 'This bot is already claimed.');
++                return await this.say(target, 'Este bot ya tiene dueño.');
+             case 'whoami':
+-                return await this.say(target, `Your Telegram user id is <code>${userId}</code>.`);
++                return await this.say(target, `Tu id de usuario de Telegram es <code>${userId}</code>.`);
+             case 'new':
+                 await this.options.runner.reset(target);
+-                return await this.say(target, '🆕 Started a fresh conversation.');
++                return await this.say(target, '🆕 Empecé una conversación nueva.');
+             case 'cd':
+                 return await this.onChangeDirectory(target, args);
+             case 'model':
+@@ -271,7 +271,7 @@
+                 return await this.onScreenshot(target);
+             case 'sessions':
+                 if (!this.options.sessions) {
+-                    return await this.say(target, 'This deployment does not keep a conversation list.');
++                    return await this.say(target, 'Esta instalación no guarda la lista de conversaciones.');
+                 }
+                 // The offer remains pending until a later callback update presses one
+                 // of its buttons. Waiting here would block the sequential poller from
+@@ -282,13 +282,25 @@
+                 return;
+             case 'stop': {
+                 const stopped = await this.options.runner.stop(target);
+-                return await this.say(target, stopped ? '🛑 Stopped.' : 'Nothing was running.');
++                return await this.say(target, stopped ? '🛑 Frenado.' : 'No había nada corriendo.');
+             }
+             case 'status':
+                 return await this.describeConversation(target);
+             default:
+-                // Unreachable: parseCommand only returns names present in COMMANDS.
+-                return await this.say(target, `Unknown command. Try ${Object.keys(COMMANDS).join(', ')}.`);
++                // Los comandos del harness (/compact, /goal) viven en el registro del
++                // agente, no en este plugin: se le pasa la línea y se muestra su respuesta.
++                const harnessCommand = this.options.harnessCommand;
++                if (harnessCommand) {
++                    const result = await harnessCommand(target, `/${name}${args === '' ? '' : ` ${args}`}`);
++                    if (result !== undefined) {
++                        if (result.kind === 'error')
++                            return await this.say(target, `⚠️ ${escapeHtml(result.text)}`);
++                        return await this.say(target, result.text === undefined ? '✅ Listo.' : `✅ ${escapeHtml(result.text)}`);
++                    }
++                }
++                // Solo los comandos propios del plugin llegan acá con un nombre que este
++                // registro no conoce.
++                return await this.say(target, `Comando desconocido. Probá con ${Object.keys(COMMANDS).join(', ')}.`);
+         }
+     }
+     /** Hand a prompt to the agent, reporting a failure into the chat. */
+@@ -324,30 +336,30 @@
+     async onDiagnostics(target) {
+         const diagnostics = this.options.diagnostics;
+         if (!diagnostics) {
+-            return await this.say(target, 'This deployment keeps no diagnostics.');
++            return await this.say(target, 'Esta instalación no guarda diagnósticos.');
+         }
+         const report = await diagnostics.report();
+         const seams = report.seams
+             .map((seam) => `| ${escapeCell(seam.name)} | ${seam.present ? '✅' : '❌'} |`)
+             .join('\n');
+         const failures = report.failures.length === 0
+-            ? '_Nothing has gone wrong since the last restart._'
++            ? '_No hubo fallas desde el último reinicio._'
+             : report.failures
+                 .map((failure) => `- \`${failure.at.replace('T', ' ').slice(0, 19)}\` ` +
+                 `${failure.level === 'error' ? '🔴' : '🟠'} ${failure.message}`)
+                 .join('\n');
+         const markdown = [
+-            '**Connection**',
++            '**Conexión**',
+             '',
+             `| | |\n| --- | --- |\n${report.status
+                 .map((row) => `| ${escapeCell(row.label)} | ${escapeCell(row.value)} |`)
+                 .join('\n')}`,
+             '',
+-            '**Harness seams**',
++            '**Enganches internos**',
+             '',
+             `| | |\n| --- | --- |\n${seams}`,
+             '',
+-            `**Recent failures** (${report.failures.length})`,
++            `**Fallas recientes** (${report.failures.length})`,
+             '',
+             failures,
+         ].join('\n');
+@@ -376,7 +388,7 @@
+     async onScreenshot(target) {
+         const screen = this.options.screen;
+         if (!screen) {
+-            return await this.say(target, 'Screenshots are off. Turn them on in Settings → Telegram → Screen.');
++            return await this.say(target, 'Las capturas están apagadas. Se activan en Ajustes → Telegram → Pantalla.');
+         }
+         const release = this.options.typing?.hold(target);
+         try {
+@@ -386,7 +398,7 @@
+         }
+         catch (error) {
+             this.logger.error('[dsh-telegram] could not take a screenshot', error);
+-            await this.say(target, '⚠️ The screenshot could not be taken.');
++            await this.say(target, '⚠️ No se pudo tomar la captura.');
+         }
+         finally {
+             release?.();
+@@ -406,16 +418,16 @@
+         const rows = [...(await this.options.runner.status(target))];
+         const models = this.options.models;
+         if (models)
+-            rows.push({ label: 'Model', value: models.describe(target) });
++            rows.push({ label: 'Modelo', value: models.describe(target) });
+         const effort = this.options.effort;
+         if (effort)
+-            rows.push({ label: 'Effort', value: effort.describe(target) });
++            rows.push({ label: 'Esfuerzo', value: effort.describe(target) });
+         const vision = this.options.vision;
+         if (vision)
+-            rows.push({ label: 'Reads images', value: vision.describe(target) });
++            rows.push({ label: 'Lee imágenes', value: vision.describe(target) });
+         const permission = this.options.permission;
+         if (permission)
+-            rows.push({ label: 'Permission', value: permission.describe(target) });
++            rows.push({ label: 'Permisos', value: permission.describe(target) });
+         // Sent as markdown so Telegram draws it as a real table — since Bot API
+         // 10.1 it parses these itself, which is the same path an agent's own
+         // tables take. A deployment without the rich send falls back to lines.
+@@ -452,29 +464,29 @@
+     async onEffort(target, args) {
+         const effort = this.options.effort;
+         if (!effort) {
+-            return await this.say(target, 'This deployment does not allow changing the effort.');
++            return await this.say(target, 'Esta instalación no permite cambiar el esfuerzo.');
+         }
+         const wanted = args.trim();
+         const offered = await effort.options(target);
+         if (offered.length === 0) {
+-            return await this.say(target, `<code>${escapeHtml(effort.model(target))}</code> offers no reasoning effort to choose.`);
++            return await this.say(target, `<code>${escapeHtml(effort.model(target))}</code> no ofrece niveles de esfuerzo para elegir.`);
+         }
+         if (wanted === '') {
+             const list = offered.map((option) => `• <code>${escapeHtml(option)}</code>`).join('\n');
+             return await this.say(target, `🎚 <code>${escapeHtml(effort.describe(target))}</code>` +
+                 originNote(effort, target) +
+-                `\n\n${list}\n\nChange it with <code>/effort high</code>.`);
++                `\n\n${list}\n\nCambialo con <code>/effort high</code>.`);
+         }
+         if (wanted.toLowerCase() === 'default') {
+             await effort.clear(target);
+-            return await this.say(target, `🎚 Back to <code>${escapeHtml(effort.describe(target))}</code>.`);
++            return await this.say(target, `🎚 De vuelta a <code>${escapeHtml(effort.describe(target))}</code>.`);
+         }
+         const chosen = await effort.choose(target, wanted);
+         if (chosen === undefined) {
+-            return await this.say(target, `⚠️ <code>${escapeHtml(effort.model(target))}</code> has no effort called ` +
+-                `<code>${escapeHtml(wanted)}</code>. It offers: ${offered.join(', ')}.`);
++            return await this.say(target, `⚠️ <code>${escapeHtml(effort.model(target))}</code> no tiene un esfuerzo llamado ` +
++                `<code>${escapeHtml(wanted)}</code>. Ofrece: ${offered.join(', ')}.`);
+         }
+-        return await this.say(target, `🎚 Thinking <code>${escapeHtml(chosen)}</code> from your next message.`);
++        return await this.say(target, `🎚 Va a pensar con <code>${escapeHtml(chosen)}</code> desde tu próximo mensaje.`);
+     }
+     /**
+      * Show or change which model reads images for this conversation.
+@@ -489,37 +501,37 @@
+     async onVision(target, args) {
+         const vision = this.options.vision;
+         if (!vision) {
+-            return await this.say(target, 'This deployment does not allow changing the image reader.');
++            return await this.say(target, 'Esta instalación no permite cambiar el lector de imágenes.');
+         }
+         const wanted = args.trim();
+         if (wanted === '') {
+             return await this.say(target, `👁 <code>${escapeHtml(vision.describe(target))}</code>` +
+                 originNote(vision, target) +
+-                '\n\nSee what is configured with <code>/model list</code>, change it with ' +
+-                '<code>/vision provider/model</code>, or turn it off with ' +
++                '\n\nMirá lo configurado con <code>/model list</code>, cambialo con ' +
++                '<code>/vision proveedor/modelo</code>, o apagalo con ' +
+                 '<code>/vision off</code>.');
+         }
+         if (OFF_WORDS.has(wanted.toLowerCase())) {
+             await vision.disable(target);
+             return await this.say(target, `👁 <code>${escapeHtml(vision.describe(target))}</code>` +
+                 originNote(vision, target) +
+-                '\n\nImages now go to the conversation itself, which needs a model that reads them.');
++                '\n\nAhora las imágenes van a la conversación misma, que necesita un modelo que las lea.');
+         }
+         if (wanted.toLowerCase() === 'default') {
+             await vision.clear(target);
+-            return await this.say(target, `👁 Back to <code>${escapeHtml(vision.describe(target))}</code>.`);
++            return await this.say(target, `👁 De vuelta a <code>${escapeHtml(vision.describe(target))}</code>.`);
+         }
+         const chosen = await vision.choose(target, wanted);
+         switch (chosen.kind) {
+             case 'route':
+-                return await this.say(target, `👁 Images now read by <code>${escapeHtml(chosen.route)}</code>.`);
++                return await this.say(target, `👁 Ahora las imágenes las lee <code>${escapeHtml(chosen.route)}</code>.`);
+             case 'ambiguous':
+-                return await this.say(target, `Several providers offer that. Name one:\n${chosen.candidates
++                return await this.say(target, `Varios proveedores lo ofrecen. Elegí uno:\n${chosen.candidates
+                     .map((candidate) => `• <code>${escapeHtml(candidate)}</code>`)
+                     .join('\n')}`);
+             default:
+-                return await this.say(target, `⚠️ No configured model called <code>${escapeHtml(wanted)}</code>. ` +
+-                    'Try <code>/model list</code>.');
++                return await this.say(target, `⚠️ Ningún modelo configurado se llama <code>${escapeHtml(wanted)}</code>. ` +
++                    'Probá con <code>/model list</code>.');
+         }
+     }
+     /**
+@@ -534,7 +546,7 @@
+     async onPermission(target, args) {
+         const permission = this.options.permission;
+         if (!permission) {
+-            return await this.say(target, 'This deployment does not allow changing permissions.');
++            return await this.say(target, 'Esta instalación no permite cambiar los permisos.');
+         }
+         const wanted = args.trim();
+         const offered = permission.options();
+@@ -550,10 +562,10 @@
+         }
+         const chosen = await permission.choose(target, wanted);
+         if (chosen === undefined) {
+-            return await this.say(target, `⚠️ No permission preset called <code>${escapeHtml(wanted)}</code>. ` +
+-                `This deployment offers: ${offered.join(', ')}.`);
++            return await this.say(target, `⚠️ No hay ningún permiso llamado <code>${escapeHtml(wanted)}</code>. ` +
++                `Esta instalación ofrece: ${offered.join(', ')}.`);
+         }
+-        return await this.say(target, `🔐 Now <code>${escapeHtml(chosen)}</code>.`);
++        return await this.say(target, `🔐 Listo, ahora <code>${escapeHtml(chosen)}</code>.`);
+     }
+     /**
+      * Show, list, or change the model this conversation talks to.
+@@ -568,33 +580,33 @@
+     async onModel(target, args) {
+         const models = this.options.models;
+         if (!models) {
+-            return await this.say(target, 'This deployment does not allow changing the model.');
++            return await this.say(target, 'Esta instalación no permite cambiar el modelo.');
+         }
+         const wanted = args.trim();
+         if (wanted === '') {
+             return await this.say(target, `🧠 <code>${escapeHtml(models.describe(target))}</code>` +
+                 originNote(models, target) +
+-                '\n\nSee them with <code>/model list</code>, or change it with ' +
+-                '<code>/model provider/model</code>.');
++                '\n\nMiralos con <code>/model list</code>, o cambialo con ' +
++                '<code>/model proveedor/modelo</code>.');
+         }
+         if (wanted.toLowerCase() === 'default') {
+             await models.clear(target);
+-            return await this.say(target, `🧠 Back to <code>${escapeHtml(models.describe(target))}</code>.`);
++            return await this.say(target, `🧠 De vuelta a <code>${escapeHtml(models.describe(target))}</code>.`);
+         }
+         if (wanted.toLowerCase() === 'list')
+             return await this.say(target, await models.list());
+         const chosen = await models.choose(target, wanted);
+         switch (chosen.kind) {
+             case 'route':
+-                return await this.say(target, `🧠 Now talking to <code>${escapeHtml(chosen.route)}</code>.\n\n` +
+-                    'It applies from your next message; this conversation carries on.');
++                return await this.say(target, `🧠 Ahora hablo con <code>${escapeHtml(chosen.route)}</code>.\n\n` +
++                    'Se aplica desde tu próximo mensaje; esta conversación sigue igual.');
+             case 'ambiguous':
+-                return await this.say(target, `Several providers offer that. Name one:\n${chosen.candidates
++                return await this.say(target, `Varios proveedores lo ofrecen. Elegí uno:\n${chosen.candidates
+                     .map((candidate) => `• <code>${escapeHtml(candidate)}</code>`)
+                     .join('\n')}`);
+             default:
+-                return await this.say(target, `⚠️ No configured model called <code>${escapeHtml(wanted)}</code>. ` +
+-                    'Try <code>/model list</code>.');
++                return await this.say(target, `⚠️ Ningún modelo configurado se llama <code>${escapeHtml(wanted)}</code>. ` +
++                    'Probá con <code>/model list</code>.');
+         }
+     }
+     /**
+@@ -612,39 +624,39 @@
+         const workspace = this.options.workspace;
+         const current = workspace?.current(target);
+         if (!workspace || current === undefined) {
+-            return await this.say(target, 'This deployment does not allow changing directory.');
++            return await this.say(target, 'Esta instalación no permite cambiar la carpeta.');
+         }
+         if (args.trim() === '') {
+-            return await this.say(target, `📁 <code>${escapeHtml(current)}</code>\n\nChange it with <code>/cd ~/projects/app</code>.`);
++            return await this.say(target, `📁 <code>${escapeHtml(current)}</code>\n\nCambiala con <code>/cd ~/proyectos/app</code>.`);
+         }
+         const wanted = workspace.resolve(args, current);
+         if (wanted === undefined) {
+-            return await this.say(target, 'Give me a directory: <code>/cd ~/projects/app</code>');
++            return await this.say(target, 'Decime una carpeta: <code>/cd ~/proyectos/app</code>');
+         }
+         if (wanted === current) {
+-            return await this.say(target, `Already in <code>${escapeHtml(wanted)}</code>.`);
++            return await this.say(target, `Ya estoy en <code>${escapeHtml(wanted)}</code>.`);
+         }
+         const verdict = await workspace.inspect(wanted);
+         if (verdict !== 'directory') {
+             const why = verdict === 'file'
+-                ? 'that is a file, not a directory'
++                ? 'eso es un archivo, no una carpeta'
+                 : verdict === 'denied'
+-                    ? 'it cannot be read'
+-                    : 'no such directory';
+-            return await this.say(target, `⚠️ Cannot use <code>${escapeHtml(wanted)}</code> — ${why}.`);
++                    ? 'no se puede leer'
++                    : 'esa carpeta no existe';
++            return await this.say(target, `⚠️ No puedo usar <code>${escapeHtml(wanted)}</code> — ${why}.`);
+         }
+         try {
+             await workspace.set(target, wanted);
+         }
+         catch (error) {
+             this.logger.error('[dsh-telegram] could not record the working directory', error);
+-            return await this.say(target, '⚠️ The directory could not be saved.');
++            return await this.say(target, '⚠️ No se pudo guardar la carpeta.');
+         }
+         // After the directory is recorded, so a failed reset still leaves the
+         // choice in place for the next message rather than losing it silently.
+         await this.options.runner.reset(target);
+-        return await this.say(target, `📁 Now working in <code>${escapeHtml(wanted)}</code>.\n\n` +
+-            '🆕 Started a fresh conversation — a session keeps the directory it opened in.');
++        return await this.say(target, `📁 Ahora trabajo en <code>${escapeHtml(wanted)}</code>.\n\n` +
++            '🆕 Empecé una conversación nueva — cada conversación conserva la carpeta donde abrió.');
+     }
+     /**
+      * Whether this conversation's own model reads images.
+diff -ru stock/package/lib/session/models.js fork/lib/session/models.js
+--- stock/package/lib/session/models.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/session/models.js	2026-10-07 02:00:32.184930573 +0000
+@@ -118,6 +118,6 @@
+ }
+ /** Render a route the way it is typed back in. */
+ export function formatRoute(route) {
+-    return route === undefined ? 'the deployment default' : `${route.provider}/${route.model}`;
++    return route === undefined ? 'el valor por defecto' : `${route.provider}/${route.model}`;
+ }
+ //# sourceMappingURL=models.js.map
+\ No newline at end of file
+diff -ru stock/package/lib/session/picker.js fork/lib/session/picker.js
+--- stock/package/lib/session/picker.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/session/picker.js	2026-10-07 02:00:32.185930607 +0000
+@@ -44,8 +44,8 @@
+             .slice(0, OFFER);
+         if (past.length === 0) {
+             await this.say(target, current === undefined
+-                ? 'No conversations yet — send a message to start one.'
+-                : 'This is the only conversation in this chat so far.');
++                ? 'Todavía no hay conversaciones — mandá un mensaje para empezar.'
++                : 'Por ahora es la única conversación de este chat.');
+             return;
+         }
+         const waiter = this.options.pending.open({});
+@@ -57,9 +57,9 @@
+             },
+         ]);
+         const delivered = await this.say(target, [
+-            '<b>Earlier conversations</b>',
++            '<b>Conversaciones anteriores</b>',
+             '',
+-            'Pick one to carry on with. The one you are in now stays where it is.',
++            'Elegí una para seguir. La actual queda donde está.',
+         ].join('\n'), keyboard);
+         if (!delivered)
+             this.options.pending.cancel(waiter.token);
+@@ -79,7 +79,7 @@
+         }
+         catch (error) {
+             this.logger.error('[dsh-telegram] could not adopt an earlier session', error);
+-            await this.say(target, '⚠️ That conversation could not be reopened.');
++            await this.say(target, '⚠️ No se pudo reabrir esa conversación.');
+         }
+     }
+     /**
+diff -ru stock/package/lib/session/recovery.js fork/lib/session/recovery.js
+--- stock/package/lib/session/recovery.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/session/recovery.js	2026-10-07 02:00:32.185930607 +0000
+@@ -62,20 +62,20 @@
+         await this.say(target, [
+             `⚠️ ${escapeHtml(failure.message)}`,
+             '',
+-            'This conversation cannot continue on the current model — an earlier ' +
+-                'message carries content it will not accept. A new conversation clears it.',
+-        ].join('\n'), [[{ text: '🆕 Start a fresh conversation', callbackData: `${KIND}:${waiter.token}:0` }]]);
++            'Esta conversación no puede seguir con el modelo actual: un mensaje anterior ' +
++                'lleva contenido que el modelo no acepta. Una conversación nueva lo destraba.',
++        ].join('\n'), [[{ text: '🆕 Empezar una conversación nueva', callbackData: `${KIND}:${waiter.token}:0` }]]);
+         const pressed = await waiter.promise;
+         this.offered.delete(sessionId);
+         if (pressed === undefined)
+             return;
+         try {
+             await this.options.reset(target);
+-            await this.say(target, '🆕 Started a fresh conversation. Send your message again.');
++            await this.say(target, '🆕 Empecé una conversación nueva. Mandá tu mensaje de nuevo.');
+         }
+         catch (error) {
+             this.logger.error('[dsh-telegram] could not start a fresh conversation', error);
+-            await this.say(target, '⚠️ Could not start a fresh conversation. Try /new.');
++            await this.say(target, '⚠️ No pude empezar una conversación nueva. Probá /new.');
+         }
+     }
+     /**
+diff -ru stock/package/lib/session/runner.js fork/lib/session/runner.js
+--- stock/package/lib/session/runner.js	1985-10-26 08:15:00.000000000 +0000
++++ fork/lib/session/runner.js	2026-10-07 02:00:32.185930607 +0000
+@@ -189,17 +189,17 @@
+         // next message opens in, and `/cd` before the first message is reasonable.
+         if (!binding) {
+             return [
+-                { label: 'Session', value: 'none yet — send a message to start one' },
+-                { label: 'Directory', value: directory },
++                { label: 'Sesión', value: 'ninguna todavía — mandá un mensaje para empezar' },
++                { label: 'Carpeta', value: directory },
+             ];
+         }
+         const live = this.options.host.live(binding.sessionId) !== undefined;
+         return [
+-            { label: 'Session', value: binding.sessionId },
+-            { label: 'Directory', value: directory },
+-            { label: 'State', value: live ? 'loaded' : 'idle, resumes on your next message' },
++            { label: 'Sesión', value: binding.sessionId },
++            { label: 'Carpeta', value: directory },
++            { label: 'Estado', value: live ? 'activa' : 'en reposo, sigue con tu próximo mensaje' },
+             {
+-                label: 'Since',
++                label: 'Desde',
+                 value: new Date(binding.createdAt).toISOString().replace('T', ' ').slice(0, 16),
+             },
+         ];
+Only in stock/package: LICENSE
+Only in stock/package: NOTICE
+Only in stock/package: README.md

@@ -1,0 +1,11 @@
+# Secrets & local state — never commit
+.env
+*.env
+!*.env.example
+*.key
+*.pem
+*token*
+credentials*
+node_modules/
+*.log
+/backups/

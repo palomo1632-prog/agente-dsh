@@ -1,0 +1,18 @@
+[Unit]
+Description=Agente DSH (DeepSeek Harness web + Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__HOME__/agente-dsh
+ExecStart=__DSH_BIN__ web --no-open
+Restart=on-failure
+RestartSec=5
+Environment=HOME=__HOME__
+Environment=DSH_HOME=__HOME__/.dsh
+EnvironmentFile=__HOME__/.dsh-env
+EnvironmentFile=__HOME__/.dsh-telegram.env
+
+[Install]
+WantedBy=multi-user.target

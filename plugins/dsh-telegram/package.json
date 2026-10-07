@@ -1,0 +1,104 @@
+{
+  "name": "@sympoies/dsh-telegram",
+  "version": "0.7.0",
+  "description": "Telegram channel for DeepSeek Harness — real Telegram markdown, and answer the agent's questions and approvals straight from chat",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./client": {
+      "default": "./lib/client.js"
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "NOTICE",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\" && tsc -p tsconfig.json && node build.client.mjs",
+    "check": "npm run typecheck && npm run test:coverage && npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\"",
+    "pack:check": "npm pack --dry-run --json --ignore-scripts",
+    "prepack": "npm run check"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/schemastery": "3.18.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "0.1.6-alpha.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/react": "18.3.31",
+    "@vitest/coverage-v8": "4.1.11",
+    "esbuild": "0.28.2",
+    "react": "18.3.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sympoies/dsh-plugins.git",
+    "directory": "packages/dsh-telegram"
+  },
+  "homepage": "https://github.com/sympoies/dsh-plugins/tree/main/packages/dsh-telegram#readme",
+  "bugs": {
+    "url": "https://github.com/sympoies/dsh-plugins/issues"
+  },
+  "author": "Adam Suchiha Fizullah",
+  "maintainers": [
+    {
+      "name": "Sympoies",
+      "url": "https://github.com/sympoies"
+    }
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "telegram",
+    "telegram-bot",
+    "agent",
+    "chatops"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
