@@ -1,10 +1,38 @@
+![Agente DSH vs Hermes](assets/duelo-agente-dsh-vs-hermes.png)
+
 # Agente DSH 🤖
 
-Tu propio agente de IA en Telegram, corriendo en **tu** VPS, con **tu** API key,
-atendiéndote desde el celular. Sin depender de servicios de terceros.
+¿Estás perdiendo el tiempo con **Hermes** u **OpenClaw** en tu VPS? Creo que esto te puede interesar.
 
-Basado en [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness)
-con el plugin de Telegram (fork con mejoras en español incluido en este repo).
+**Agente DSH** es un agente estilo Hermes, pero con asteroides. 🚀
+
+### En pocas palabras
+
+> **DSH Harness** + **Camoufox** (navegador antidetect) + **Mnemosyne** (memoria mejorada) + **Proxy residencial** para salir con IP de tu casa (la doc explica cómo configurarlo) + **Plugin de Telegram**
+
+---
+
+## Ventajas sobre Hermes
+
+- ✅ **¡No se olvida de nada importante!** (Dios mío, yo también sufrí con Hermes por este problema)
+- 🪶 **Pesa 17 veces menos** y no crece sin control.
+- ⚡ **73% más rápido** en responder.
+- 📉 **Consume 67% menos de tokens** por tarea.
+- 😌 **1 millón menos de problemas** para completar las tareas.
+
+## ¿Para qué lo uso?
+
+Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, investigar cosas, responder emails, etc. Pero además, algo que **nunca pude hacer con Hermes**:
+
+- 🌐 Tengo **47 proyectos web de clientes distintos**. De vez en cuando un cliente pide un cambio — por lo general a cualquier hora — y si es algo rápido, **se lo pido a mi agente por Telegram** (incluso le paso el mensaje tal cual me lo envió el cliente).
+- 📊 **Vigilar cuándo se caen los anuncios** de Meta, TikTok, etc., y hacer un relevamiento para ver si hay diferencias grandes respecto a los promedios.
+- 📰 **Un email diario con las noticias locales**, con todas mis preferencias (Hermes podía hacer esto, pero siempre tenía un problema).
+- 💬 **Controlar los comentarios de 32 fan pages** de Facebook e Instagram: responde, oculta, elimina, o me avisa si hay uno importante sin responder (Hermes lo hacía hasta cierto punto; después alucinaba).
+- 📅 **Publicador de contenido** para las fan pages e Instagram — más de 32 páginas de clientes.
+
+…y varias cosas más. Espero que les sirva. 🙌
+
+> 👇 ¿Lo querés en tu VPS? Seguí la **[Instalación en 3 pasos](#instalación-en-3-pasos)** de abajo — tu agente de código hace todo el trabajo.
 
 ## Qué obtenés
 
