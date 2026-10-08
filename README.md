@@ -2,6 +2,8 @@
 
 # Agente DSH 🤖
 
+**Versión 1.1.0** (2026-10-08) — [novedades](#novedades)
+
 ¿Estás perdiendo el tiempo con **Hermes** u **OpenClaw** en tu VPS? Creo que esto te puede interesar.
 
 **Agente DSH** es un agente estilo Hermes, pero con asteroides. 🚀
@@ -39,6 +41,8 @@ Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, inv
 - Un bot de Telegram que responde desde tu VPS (siempre prendido, siempre tuyo)
 - Ejecuta comandos, edita archivos y trabaja en tu servidor con tu permiso
 - Las preguntas y aprobaciones del agente llegan como **botones en el chat**
+- **Cambiás de proyecto desde el teléfono** con un botón (`/cambiarproyecto`), sin tipear rutas
+- Un agente que sabe **crear y administrar sus propios proyectos** (skill incluida)
 - Memoria de largo plazo (Mnemosyne) multilingüe
 - Notas de voz: le hablás y te entiende (transcripción con ElevenLabs — opcional)
 
@@ -70,12 +74,35 @@ Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, inv
 |---|---|
 | `INSTALL-PROMPT.md` | El prompt completo que le das a tu agente instalador |
 | `install/` | Scripts que el agente ejecuta en tu VPS |
-| `plugins/dsh-telegram/` | Fork del plugin de Telegram (comandos y respuestas en español + fixes) |
+| `plugins/dsh-telegram/` | Fork del plugin de Telegram (comandos y respuestas en español + fixes + selector de proyectos) |
+| `selector-proyecto/` | El selector de proyectos del bot (`/cambiarproyecto`): código, parche y cómo reaplicarlo |
+| `skills/` | Skills del agente (hoy: `crear-proyecto-harness`); el instalador las copia a `~/.dsh/skills/` |
 | `docs/TROUBLESHOOTING.md` | Los errores típicos y cómo salirlas (en inglés, para tu agente) |
 | `docs/voz-elevenlabs.md` | Notas de voz: qué es y cómo activarlo (opcional) |
 | `docs/proxy-residencial.md` | Salí a internet con una IP residencial (celular viejo, mini-PC) sin tocar tu VPS |
 | `docs/camoufox.md` | Navegador antidetect opcional para investigación |
 | `docs/proveedores.md` | ¿Usás ChatGPT/Claude en vez de DeepSeek? Leé esto |
+
+## Novedades
+
+### v1.1.0 — 2026-10-08
+
+- 🗂 **Cambiar de proyecto desde el teléfono**: el bot trae el comando
+  `/cambiarproyecto` (también `/proyecto` y `/proyectos`), que muestra tus
+  proyectos del panel como botones y cambia la carpeta de trabajo sin tipear
+  rutas. Ya viene aplicado en el plugin de este repo: no hay que hacer nada.
+  Si actualizás el plugin, se reaplica con `selector-proyecto/apply.sh`.
+- 🧠 **Skill `crear-proyecto-harness` incluida**: el agente sabe crear, renombrar
+  y sacar proyectos del harness por su cuenta. El instalador la deja lista en
+  `~/.dsh/skills/`.
+- 🛠 **Instalador**: paso nuevo que copia las skills del repo, y el menú del bot
+  ahora incluye el comando nuevo.
+- 📄 **Docs**: cómo funciona el selector (`selector-proyecto/README.md`) y cómo
+  republicar el menú del teléfono (`docs/TROUBLESHOOTING.md`).
+
+Esta es la primera versión numerada del repo: antes no llevaba número. El número
+vive en el archivo [`VERSION`](VERSION) — subilo en cada cambio que afecte a
+quien instala.
 
 ## Filosofía
 

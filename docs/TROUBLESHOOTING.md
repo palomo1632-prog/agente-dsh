@@ -76,3 +76,24 @@ If a script changes system state that can cut your own access (routes, firewall)
 **arm the rollback timer BEFORE making the change**, and abort if arming fails.
 `systemd-run` talks to local systemd — it works even when the network doesn't,
 but only if you create it before the network breaks.
+
+## The bot command menu (the phone's `/` list)
+
+The menu shown when the owner types `/` in Telegram is NOT read from the plugin's
+`COMMANDS`: it is published to the Bot API with `setMyCommands`. `install.sh`
+publishes `install/bot-commands.json` (Spanish descriptions) at the end of the
+installation. Consequences:
+
+- A command that exists in the plugin's `COMMANDS` but not in that JSON **works**
+  when typed, but does not appear in the list. When you add a command (e.g. the
+  `/cambiarproyecto` project picker), add it to `install/bot-commands.json` too
+  and republish.
+- Republishing is one call, no restart needed:
+  `curl -s -F "commands=<install/bot-commands.json" "https://api.telegram.org/bot<TOKEN>/setMyCommands"`.
+- A **more specific scope shadows the default one**: if a previous installation
+  registered commands for `all_private_chats` or `all_group_chats`, the phone
+  keeps showing those and ignoring the default scope. Check with
+  `getMyCommands` (pass `{"scope":{"type":"all_private_chats"}}`) and clear the
+  stale scope with `deleteMyCommands` before republishing.
+- Only the owner can talk to the bot, so this is cosmetic — but a stale menu
+  makes the owner think commands are broken.

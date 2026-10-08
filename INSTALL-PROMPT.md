@@ -10,6 +10,8 @@ You are installing **Agente DSH** — a personal AI agent that lives on the owne
 and talks to them via Telegram. Work step by step, verify each step, and ask the owner
 only for the information you cannot find yourself.
 
+Repo version: see the [`VERSION`](VERSION) file (currently `1.1.0`).
+
 ## Inputs you need from the owner (ask one at a time)
 
 1. **Telegram bot token** — from [@BotFather](https://t.me/BotFather) (`/newbot`).
@@ -24,10 +26,16 @@ only for the information you cannot find yourself.
    - installs Node 24 if missing (NodeSource) and pnpm,
    - installs `@deepseek-ai/dsh` globally (pinned version),
    - installs the **forked Telegram plugin from this repo** (`plugins/dsh-telegram/`),
-     applying the documented version exemption,
+     applying the documented version exemption. The fork already includes the
+     Spanish replies and the `/cambiarproyecto` project picker — nothing extra to
+     run for those (see `selector-proyecto/README.md` if a future plugin update
+     wipes them),
    - installs `dsh-mnemosyne` (memory),
    - creates `~/agente-dsh/` (the agent working directory, ships this repo's `AGENTS.md`
      as the agent's permanent instructions),
+   - deploys this repo's **agent skills** (`skills/`) into `~/.dsh/skills/` — today
+     `crear-proyecto-harness`, which is how the agent creates, renames and removes
+     harness projects on its own,
    - creates `~/.dsh-env` and `~/.dsh-telegram.env` (chmod 600) for the API key and
      the bot token — **never commit or print these values**,
    - registers the systemd service `dsh-web` (enabled at boot),
@@ -36,7 +44,11 @@ only for the information you cannot find yourself.
    `BOT_TOKEN=... DEEPSEEK_API_KEY=... bash install/install.sh`
 3. **Verify**: `systemctl is-active dsh-web`, then `curl` the Telegram `getMe`
    endpoint with the token. Check `journalctl -u dsh-web -n 30` for a
-   `[dsh-telegram]` line saying the bot is connected.
+   `[dsh-telegram]` line saying the bot is connected. Also confirm the phone menu
+   came out right (`getMyCommands`) — it should include `cambiarproyecto`
+   ("Cambiar de proyecto eligiendo de una lista"); if the menu is missing or shows
+   stale commands, read the "bot command menu" section of
+   `docs/TROUBLESHOOTING.md`.
 4. **Claim the bot**: read `~/.dsh/dsh-telegram/claim-code.txt` and tell the owner to
    send that `/claim <code>` message to their bot from their phone. Wait for them to
    confirm it worked (the file disappears once claimed).

@@ -18,6 +18,7 @@ export const COMMANDS = {
     claim: 'Tomar el control del bot: /claim CODIGO',
     new: 'Empezar una conversación nueva, olvidando la actual',
     cd: 'Ver o cambiar la carpeta de trabajo: /cd ~/proyectos/app',
+    cambiarproyecto: 'Cambiar de proyecto eligiendo de la lista',
     model: 'Ver o cambiar el modelo: /model list, o /model proveedor/modelo',
     effort: 'Ver o cambiar cuánto piensa antes de responder: /effort high',
     vision: 'Ver o cambiar el modelo que lee imágenes: /vision off',

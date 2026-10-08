@@ -1,0 +1,78 @@
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -44,6 +44,7 @@
+ import { VersionCheck } from './versions.js';
+ import { ChatHistory } from './session/history.js';
+ import { SessionPicker } from './session/picker.js';
++import { ProjectPicker } from './session/projects.js';
+ import { isUsableDirectory, resolveDirectory } from './session/workspaces.js';
+ import { ChatPreferences } from './session/preferences.js';
+ import { effortsFor, formatRoute, listCatalog, matchEffort, matchRoute } from './session/models.js';
+@@ -424,6 +425,18 @@
+         adopt: (target, sessionId) => runner.adopt(target, sessionId),
+         logger,
+     });
++
++    const projectPicker = new ProjectPicker({
++        surface,
++        pending,
++        logger,
++        home,
++        current: cwdFor,
++        inspect: inspectDirectory,
++        set: (target, directory) => workspaces.set(target, directory),
++        reset: (target) => runner.reset(target),
++        registry: () => ctx.get('workspaceRegistry'),
++    });
+     const startedAt = Date.now();
+     /**
+      * Which harness services this deployment composed.
+@@ -500,6 +513,7 @@
+             }
+             : {}),
+         sessions: sessionPicker,
++        projects: projectPicker,
+         typing,
+         diagnostics: {
+             async report() {
+--- a/lib/router.js
++++ b/lib/router.js
+@@ -101,7 +101,8 @@
+         const routed = this.options.questions.handleCallback(query.data) ||
+             this.options.approvals.handleCallback(query.data) ||
+             (this.options.recovery?.handleCallback(query.data) ?? false) ||
+-            (this.options.sessions?.handleCallback(query.data) ?? false);
++            (this.options.sessions?.handleCallback(query.data) ?? false) ||
++            (this.options.projects?.handleCallback(query.data) ?? false);
+         if (!routed) {
+             this.logger.debug('[dsh-telegram] ignoring a stale or unknown button press');
+         }
+@@ -257,6 +258,18 @@
+                 return await this.say(target, '🆕 Empecé una conversación nueva.');
+             case 'cd':
+                 return await this.onChangeDirectory(target, args);
++            case 'proyecto':
++            case 'proyectos':
++            case 'cambiarproyecto':
++                if (this.options.projects === undefined) {
++                    return await this.say(target, 'Esta instalación no tiene la lista de proyectos.');
++                }
++                // Sin await, igual que /sessions: el poller tiene que seguir
++                // recibiendo para poder entregar el botón que resuelve esto.
++                void this.options.projects.offer(target).catch((error) => {
++                    this.logger.error('[dsh-telegram] project picker failed', error);
++                });
++                return;
+             case 'model':
+                 return await this.onModel(target, args);
+             case 'effort':
+--- a/lib/commands.js
++++ b/lib/commands.js
+@@ -18,6 +18,7 @@
+     claim: 'Tomar el control del bot: /claim CODIGO',
+     new: 'Empezar una conversación nueva, olvidando la actual',
+     cd: 'Ver o cambiar la carpeta de trabajo: /cd ~/proyectos/app',
++    cambiarproyecto: 'Cambiar de proyecto eligiendo de la lista',
+     model: 'Ver o cambiar el modelo: /model list, o /model proveedor/modelo',
+     effort: 'Ver o cambiar cuánto piensa antes de responder: /effort high',
+     vision: 'Ver o cambiar el modelo que lee imágenes: /vision off',

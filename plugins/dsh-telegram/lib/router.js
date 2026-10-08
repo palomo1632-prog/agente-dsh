@@ -101,7 +101,8 @@ export class UpdateRouter {
         const routed = this.options.questions.handleCallback(query.data) ||
             this.options.approvals.handleCallback(query.data) ||
             (this.options.recovery?.handleCallback(query.data) ?? false) ||
-            (this.options.sessions?.handleCallback(query.data) ?? false);
+            (this.options.sessions?.handleCallback(query.data) ?? false) ||
+            (this.options.projects?.handleCallback(query.data) ?? false);
         if (!routed) {
             this.logger.debug('[dsh-telegram] ignoring a stale or unknown button press');
         }
@@ -257,6 +258,18 @@ export class UpdateRouter {
                 return await this.say(target, '🆕 Empecé una conversación nueva.');
             case 'cd':
                 return await this.onChangeDirectory(target, args);
+            case 'proyecto':
+            case 'proyectos':
+            case 'cambiarproyecto':
+                if (this.options.projects === undefined) {
+                    return await this.say(target, 'Esta instalación no tiene la lista de proyectos.');
+                }
+                // Sin await, igual que /sessions: el poller tiene que seguir
+                // recibiendo para poder entregar el botón que resuelve esto.
+                void this.options.projects.offer(target).catch((error) => {
+                    this.logger.error('[dsh-telegram] project picker failed', error);
+                });
+                return;
             case 'model':
                 return await this.onModel(target, args);
             case 'effort':

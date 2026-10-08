@@ -38,28 +38,33 @@ command -v pnpm >/dev/null || npm install -g pnpm >/dev/null
 log "3/8 DeepSeek Harness (dsh) ${DSH_VERSION}"
 npm install -g "@deepseek-ai/dsh@${DSH_VERSION}" >/dev/null
 
-log "4/8 Telegram plugin (fork from this repo)"
+log "4/9 Telegram plugin (fork from this repo, includes the /cambiarproyecto project picker)"
 mkdir -p "$DSH_HOME/profiles/web"
 dsh plugin --profile web allow-version @sympoies/dsh-telegram@0.7.0 \
   --dsh-version "$DSH_VERSION" --accept-risk 2>/dev/null || true
 dsh plugin --profile web add -w "$REPO_DIR/plugins/dsh-telegram"
 
-log "5/8 Mnemosyne (long-term memory)"
+log "5/9 Mnemosyne (long-term memory)"
 dsh plugin --profile web add -w dsh-mnemosyne@0.6.0 2>/dev/null \
   || dsh plugin --profile web add -w dsh-mnemosyne@0.6.0 --accept-risk
 
-log "6/8 Secrets (chmod 600, never printed)"
+log "6/9 Secrets (chmod 600, never printed)"
 umask 077
 printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$HOME/.dsh-env"
 printf 'TELEGRAM_BOT_TOKEN=%s\n' "$BOT_TOKEN"     > "$HOME/.dsh-telegram.env"
 grep -q '^DEEPSEEK_API_KEY=' /etc/environment 2>/dev/null || \
   cat "$HOME/.dsh-env" >> /etc/environment
 
-log "7/8 Agent working directory + instructions"
+log "7/9 Agent working directory + instructions"
 mkdir -p "$WORKDIR"
 cp "$REPO_DIR/AGENTS.md" "$WORKDIR/AGENTS.md"
 
-log "8/8 systemd service (dsh-web, enabled at boot)"
+log "8/9 Agent skills (copy this repo's skills into $DSH_HOME/skills)"
+mkdir -p "$DSH_HOME/skills"
+cp -R "$REPO_DIR/skills/." "$DSH_HOME/skills/"
+ls "$DSH_HOME/skills"
+
+log "9/9 systemd service (dsh-web, enabled at boot)"
 DSH_BIN="$(command -v dsh)" || fail "dsh binary not found after install"
 sed -e "s|__HOME__|$HOME|g" -e "s|__DSH_BIN__|$DSH_BIN|g" \
   "$REPO_DIR/install/dsh-web.service" > /etc/systemd/system/dsh-web.service

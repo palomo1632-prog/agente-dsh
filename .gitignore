@@ -9,3 +9,5 @@ credentials*
 node_modules/
 *.log
 /backups/
+__pycache__/
+*.pyc

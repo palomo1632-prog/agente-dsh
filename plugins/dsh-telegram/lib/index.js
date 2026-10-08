@@ -44,6 +44,7 @@ import { FailureLog, recordingLogger } from './failures.js';
 import { VersionCheck } from './versions.js';
 import { ChatHistory } from './session/history.js';
 import { SessionPicker } from './session/picker.js';
+import { ProjectPicker } from './session/projects.js';
 import { isUsableDirectory, resolveDirectory } from './session/workspaces.js';
 import { ChatPreferences } from './session/preferences.js';
 import { effortsFor, formatRoute, listCatalog, matchEffort, matchRoute } from './session/models.js';
@@ -424,6 +425,18 @@ async function start(ctx, config, logger, signal, status, secrets, failures) {
         adopt: (target, sessionId) => runner.adopt(target, sessionId),
         logger,
     });
+
+    const projectPicker = new ProjectPicker({
+        surface,
+        pending,
+        logger,
+        home,
+        current: cwdFor,
+        inspect: inspectDirectory,
+        set: (target, directory) => workspaces.set(target, directory),
+        reset: (target) => runner.reset(target),
+        registry: () => ctx.get('workspaceRegistry'),
+    });
     const startedAt = Date.now();
     /**
      * Which harness services this deployment composed.
@@ -500,6 +513,7 @@ async function start(ctx, config, logger, signal, status, secrets, failures) {
             }
             : {}),
         sessions: sessionPicker,
+        projects: projectPicker,
         typing,
         diagnostics: {
             async report() {
