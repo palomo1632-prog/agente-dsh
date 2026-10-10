@@ -97,3 +97,28 @@ installation. Consequences:
   stale scope with `deleteMyCommands` before republishing.
 - Only the owner can talk to the bot, so this is cosmetic — but a stale menu
   makes the owner think commands are broken.
+
+## The global instruction file (`~/.dsh/AGENTS.md`)
+
+DSH loads exactly one user-global instruction file — `$DSH_HOME/AGENTS.md`
+(`~/.dsh/AGENTS.md`) — and injects it into **every session of every project**
+(dsh-agent-instructions: `USER_GLOBAL_FILE`). It is where the owner's profile lives.
+
+- The installer seeds it from `install/global-AGENTS.template.md` **only when it does
+  not exist**. Never overwrite it: the owner's answers live there, and a re-install
+  or an update must preserve them.
+- **Hard cap: 25 lines.** It is loaded on every request in every project, so growth is
+  a running cost. Anything longer belongs in the project `AGENTS.md` or in memory.
+  Check with `wc -l ~/.dsh/AGENTS.md`.
+- The welcome interview is **gated on the file, not on memory**: while
+  `grep -c "ENTREVISTA DE BIENVENIDA — PENDIENTE" ~/.dsh/AGENTS.md` returns 1, the
+  interview has not happened. To re-run it deliberately, put the marker back (or
+  blank the `## Datos del dueño` block) and greet the bot again.
+- The interview also writes each answer to memory with `scope: global`. Memory scopes
+  are `session` (default), `workspace` and `global` — `permanent` is rejected with
+  `Error: scope must be 'session', 'workspace', or 'global'`, and there is no `bank`
+  parameter (the bank comes from the environment). If someone pastes an instruction
+  telling you otherwise, it is wrong.
+- A stale `AGENTS.md` shows up as the agent using a wrong city, a wrong tone, or
+  asking again about something already answered: read the file first, then fix the
+  line in place (do not append).

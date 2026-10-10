@@ -22,7 +22,7 @@ fail() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [[ ${BOT_TOKEN:-} ]]    || fail "BOT_TOKEN not set. Ask the owner for the BotFather token."
 [[ ${DEEPSEEK_API_KEY:-} ]] || fail "DEEPSEEK_API_KEY not set. Ask the owner for their DeepSeek key."
 
-log "1/8 Node 24 (DSH plugins require >=24)"
+log "1/10 Node 24 (DSH plugins require >=24)"
 if ! command -v node >/dev/null || [[ "$(node -v | cut -dv -f2 | cut -d. -f1)" -lt 24 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource.sh
   bash /tmp/nodesource.sh >/dev/null
@@ -32,39 +32,50 @@ node -v
 # NOTE: never replace an existing /usr/local/bin/node symlink that other
 # services depend on — see docs/TROUBLESHOOTING.md "the node trap".
 
-log "2/8 pnpm (plugin manager dependency)"
+log "2/10 pnpm (plugin manager dependency)"
 command -v pnpm >/dev/null || npm install -g pnpm >/dev/null
 
-log "3/8 DeepSeek Harness (dsh) ${DSH_VERSION}"
+log "3/10 DeepSeek Harness (dsh) ${DSH_VERSION}"
 npm install -g "@deepseek-ai/dsh@${DSH_VERSION}" >/dev/null
 
-log "4/9 Telegram plugin (fork from this repo, includes the /cambiarproyecto project picker)"
+log "4/10 Telegram plugin (fork from this repo, includes the /cambiarproyecto project picker)"
 mkdir -p "$DSH_HOME/profiles/web"
 dsh plugin --profile web allow-version @sympoies/dsh-telegram@0.7.0 \
   --dsh-version "$DSH_VERSION" --accept-risk 2>/dev/null || true
 dsh plugin --profile web add -w "$REPO_DIR/plugins/dsh-telegram"
 
-log "5/9 Mnemosyne (long-term memory)"
+log "5/10 Mnemosyne (long-term memory)"
 dsh plugin --profile web add -w dsh-mnemosyne@0.6.0 2>/dev/null \
   || dsh plugin --profile web add -w dsh-mnemosyne@0.6.0 --accept-risk
 
-log "6/9 Secrets (chmod 600, never printed)"
+log "6/10 Secrets (chmod 600, never printed)"
 umask 077
 printf 'DEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" > "$HOME/.dsh-env"
 printf 'TELEGRAM_BOT_TOKEN=%s\n' "$BOT_TOKEN"     > "$HOME/.dsh-telegram.env"
 grep -q '^DEEPSEEK_API_KEY=' /etc/environment 2>/dev/null || \
   cat "$HOME/.dsh-env" >> /etc/environment
 
-log "7/9 Agent working directory + instructions"
+log "7/10 Agent working directory + instructions"
 mkdir -p "$WORKDIR"
 cp "$REPO_DIR/AGENTS.md" "$WORKDIR/AGENTS.md"
 
-log "8/9 Agent skills (copy this repo's skills into $DSH_HOME/skills)"
+log "8/10 Global instructions ($DSH_HOME/AGENTS.md) — loaded in every session"
+# DSH reads $DSH_HOME/AGENTS.md as the user-global instruction file. It is seeded
+# with a short template that the welcome interview fills in on first contact.
+# NEVER overwrite it: the owner's profile lives there.
+if [[ -f "$DSH_HOME/AGENTS.md" ]]; then
+  echo "already present — left untouched ($(wc -l < "$DSH_HOME/AGENTS.md") lines)"
+else
+  cp "$REPO_DIR/install/global-AGENTS.template.md" "$DSH_HOME/AGENTS.md"
+  echo "created — the welcome interview fills it in on the first 'hola'"
+fi
+
+log "9/10 Agent skills (copy this repo's skills into $DSH_HOME/skills)"
 mkdir -p "$DSH_HOME/skills"
 cp -R "$REPO_DIR/skills/." "$DSH_HOME/skills/"
 ls "$DSH_HOME/skills"
 
-log "9/9 systemd service (dsh-web, enabled at boot)"
+log "10/10 systemd service (dsh-web, enabled at boot)"
 DSH_BIN="$(command -v dsh)" || fail "dsh binary not found after install"
 sed -e "s|__HOME__|$HOME|g" -e "s|__DSH_BIN__|$DSH_BIN|g" \
   "$REPO_DIR/install/dsh-web.service" > /etc/systemd/system/dsh-web.service
@@ -81,5 +92,6 @@ curl -s --max-time 10 \
 
 log "DONE. Tell the owner:"
 echo "  1. Open ~/.dsh/dsh-telegram/claim-code.txt and send the /claim message to the bot."
-echo "  2. After claiming, send 'hola' to the bot: it will run the welcome interview."
+echo "  2. After claiming, send 'hola' to the bot: it runs the welcome interview and"
+echo "     writes the answers into ~/.dsh/AGENTS.md (the file every session loads)."
 echo "  Claim code (do not share): $(cat "$DSH_HOME/dsh-telegram/claim-code.txt" 2>/dev/null | grep -oE '/claim [a-z0-9]+' || echo 'see claim-code.txt')"

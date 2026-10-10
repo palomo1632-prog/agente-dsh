@@ -2,7 +2,7 @@
 
 # Agente DSH 🤖
 
-**Versión 1.1.0** (2026-10-08) — [novedades](#novedades)
+**Versión 1.2.0** (2026-10-10) — [novedades](#novedades)
 
 ¿Estás perdiendo el tiempo con **Hermes** u **OpenClaw** en tu VPS? Creo que esto te puede interesar.
 
@@ -43,6 +43,9 @@ Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, inv
 - Las preguntas y aprobaciones del agente llegan como **botones en el chat**
 - **Cambiás de proyecto desde el teléfono** con un botón (`/cambiarproyecto`), sin tipear rutas
 - Un agente que sabe **crear y administrar sus propios proyectos** (skill incluida)
+- **Tu perfil en un archivo que se carga siempre**: la encuesta inicial arma
+  `~/.dsh/AGENTS.md` (ciudad, uso, cómo te gusta que te responda) y ese archivo entra
+  en todas las sesiones y proyectos. Corto a la fuerza: máximo 25 líneas
 - Memoria de largo plazo (Mnemosyne) multilingüe
 - Notas de voz: le hablás y te entiende (transcripción con ElevenLabs — opcional)
 
@@ -73,7 +76,8 @@ Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, inv
 | Archivo/carpeta | Qué es |
 |---|---|
 | `INSTALL-PROMPT.md` | El prompt completo que le das a tu agente instalador |
-| `install/` | Scripts que el agente ejecuta en tu VPS |
+| `install/` | Scripts que el agente ejecuta en tu VPS, incluida la plantilla del `AGENTS.md` global (`global-AGENTS.template.md`) |
+| `AGENTS.md` | Las instrucciones permanentes del agente (incluye la encuesta de bienvenida) |
 | `plugins/dsh-telegram/` | Fork del plugin de Telegram (comandos y respuestas en español + fixes + selector de proyectos) |
 | `selector-proyecto/` | El selector de proyectos del bot (`/cambiarproyecto`): código, parche y cómo reaplicarlo |
 | `skills/` | Skills del agente (hoy: `crear-proyecto-harness`); el instalador las copia a `~/.dsh/skills/` |
@@ -84,6 +88,24 @@ Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, inv
 | `docs/proveedores.md` | ¿Usás ChatGPT/Claude en vez de DeepSeek? Leé esto |
 
 ## Novedades
+
+### v1.2.0 — 2026-10-10
+
+- 🧠 **La encuesta de bienvenida ahora sirve de verdad**: las respuestas se escriben
+  en `~/.dsh/AGENTS.md`, el archivo que DSH carga en **todas** las sesiones y
+  proyectos. Antes se guardaban como "memorias permanentes" con un scope que la
+  herramienta **rechaza** (`permanent` no existe: son `session`, `workspace` o
+  `global`), así que el perfil se quedaba en la sesión y el archivo global quedaba
+  vacío.
+- 📏 **Corto y obligatorio**: el archivo global tiene tope de **25 líneas** y las
+  reglas se lo dicen al agente en tres lugares (plantilla, `AGENTS.md` del proyecto y
+  las instrucciones de la encuesta) para que nadie lo haga crecer sin control.
+- 🧾 **La encuesta se dispara por el archivo, no por memoria**: mientras el marcador
+  `ENTREVISTA DE BIENVENIDA — PENDIENTE` siga en el archivo, la encuesta está
+  pendiente. Así se puede verificar y repetir a mano.
+- 🛠 **Instalador**: paso nuevo que siembra el archivo global desde la plantilla y
+  **nunca lo pisa** si ya existe (tu perfil sobrevive reinstalaciones y updates).
+- 📄 **Docs**: sección nueva en `docs/TROUBLESHOOTING.md` sobre el archivo global.
 
 ### v1.1.0 — 2026-10-08
 
