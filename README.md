@@ -2,7 +2,7 @@
 
 # Agente DSH 🤖
 
-**Versión 1.2.0** (2026-10-10) — [novedades](#novedades)
+**Versión 1.3.0** (2026-10-10) — [novedades](#novedades)
 
 ¿Estás perdiendo el tiempo con **Hermes** u **OpenClaw** en tu VPS? Creo que esto te puede interesar.
 
@@ -46,6 +46,9 @@ Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, inv
 - **Tu perfil en un archivo que se carga siempre**: la encuesta inicial arma
   `~/.dsh/AGENTS.md` (ciudad, uso, cómo te gusta que te responda) y ese archivo entra
   en todas las sesiones y proyectos. Corto a la fuerza: máximo 25 líneas
+- **Lo que tu máquina sabe hacer, siempre a mano**: el mismo archivo lista las
+  capacidades activas (notas de voz, navegador antidetect, proxy residencial) para que
+  el agente las use en cualquier proyecto, sin que se lo tengas que recordar
 - Memoria de largo plazo (Mnemosyne) multilingüe
 - Notas de voz: le hablás y te entiende (transcripción con ElevenLabs — opcional)
 
@@ -88,6 +91,20 @@ Para todo lo que se usa Hermes, desde ya: recordatorios, asistente personal, inv
 | `docs/proveedores.md` | ¿Usás ChatGPT/Claude en vez de DeepSeek? Leé esto |
 
 ## Novedades
+
+### v1.3.0 — 2026-10-10
+
+- 🧰 **El `AGENTS.md` global ahora dice qué tiene la máquina**: la sección
+  `## Capacidades activas` la escribe un **detector** (`install/global-agents-refresh.mjs`),
+  no una persona. Lista solo lo que está instalado y andando ahí: notas de voz
+  (ElevenLabs o Whisper), Camoufox y proxy residencial.
+- 🔁 **Se mantiene sola**: el instalador la corre en cada instalación y se vuelve a
+  correr cuando instalás o sacás un extra. Si el proxy no está configurado **no
+  aparece**, y aparece el día que lo configures.
+- 🔐 **Sin credenciales en el archivo**: el proxy se lista como "configurado" y apunta
+  a `~/.dsh-proxy.env`; la URL con usuario y contraseña nunca va al archivo que se
+  carga siempre.
+- 📏 El tope sigue en **25 líneas**: entran la entrevista (5) y hasta 4 capacidades.
 
 ### v1.2.0 — 2026-10-10
 

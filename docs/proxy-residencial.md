@@ -40,11 +40,24 @@ Decile una sola vez a tu Agente DSH:
 > comando sale por mi casa (`curl -x '...'`, o el navegador con ese proxy
 > configurado). Nunca cambies rutas del sistema ni uses exit nodes.
 
-El agente lo guarda en su memoria y lo aplica siempre así:
+Guardá la credencial en un archivo aparte (nunca en el chat ni en el `AGENTS.md`):
+
+```bash
+umask 077
+printf 'RESIDENTIAL_PROXY=http://usuario:clave@100.x.y.z:8888\n' > ~/.dsh-proxy.env
+chmod 600 ~/.dsh-proxy.env
+node ~/.dsh/global-agents-refresh.mjs     # lo lista en el AGENTS.md global
+```
+
+Ese archivo es el interruptor: mientras exista con `RESIDENTIAL_PROXY`, el agente lo
+tiene presente en **todas** las sesiones (aparece en `## Capacidades activas` de
+`~/.dsh/AGENTS.md`, sin la clave) y lo aplica siempre por comando:
 
 ```bash
 curl -x 'http://usuario:clave@100.x.y.z:8888' https://sitio-bloqueado.com
 ```
+
+Si lo cambiás o lo borrás, volvé a correr el mismo refresh.
 
 Y verifica con `ifconfig.me` que la IP de salida sea la de tu casa antes de
 confiar en el resultado.

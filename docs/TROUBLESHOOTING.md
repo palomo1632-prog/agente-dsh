@@ -119,6 +119,21 @@ DSH loads exactly one user-global instruction file — `$DSH_HOME/AGENTS.md`
   `Error: scope must be 'session', 'workspace', or 'global'`, and there is no `bank`
   parameter (the bank comes from the environment). If someone pastes an instruction
   telling you otherwise, it is wrong.
+- `## Capacidades activas` is written **by detection, never by hand**:
+  `node ~/.dsh/global-agents-refresh.mjs` (the installer leaves a copy at
+  `$DSH_HOME/global-agents-refresh.mjs`; `--dry-run` previews, `--home DIR` targets
+  another home for testing). It rewrites only that section — the owner's profile is
+  never touched. It lists only extras that are really active: ElevenLabs
+  (`elevenlabs-stt` service or the `media.speech` patch), Whisper (`whisper-stt` or
+  `faster_whisper`), Camoufox (payload in `~/.cache/camoufox/browsers`, or the Python
+  package) and the residential proxy (`RESIDENTIAL_PROXY=` in `~/.dsh-proxy.env`).
+  A capability that is not installed must **not** appear.
+- Re-run the refresh after installing or removing an extra; the installer also runs it
+  on every install, so re-running `install.sh` is enough to bring the list up to date.
+- The proxy URL (user and password) must never land in this file: the section only
+  points at `~/.dsh-proxy.env`.
 - A stale `AGENTS.md` shows up as the agent using a wrong city, a wrong tone, or
   asking again about something already answered: read the file first, then fix the
-  line in place (do not append).
+  line in place (do not append). A stale **capabilities** section shows up as the
+  agent offering to use something the machine does not have, or ignoring something it
+  does: re-run the refresh and check its output.

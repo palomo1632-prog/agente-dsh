@@ -60,15 +60,20 @@ mkdir -p "$WORKDIR"
 cp "$REPO_DIR/AGENTS.md" "$WORKDIR/AGENTS.md"
 
 log "8/10 Global instructions ($DSH_HOME/AGENTS.md) — loaded in every session"
-# DSH reads $DSH_HOME/AGENTS.md as the user-global instruction file. It is seeded
-# with a short template that the welcome interview fills in on first contact.
-# NEVER overwrite it: the owner's profile lives there.
+# DSH reads $DSH_HOME/AGENTS.md as the user-global instruction file. It carries the
+# owner's profile (welcome interview) plus the capabilities really installed here.
+# NEVER overwrite it: the profile lives there. Only the capabilities section is
+# regenerated, by the helper we keep at a stable path so the agent can re-run it.
 if [[ -f "$DSH_HOME/AGENTS.md" ]]; then
-  echo "already present — left untouched ($(wc -l < "$DSH_HOME/AGENTS.md") lines)"
+  echo "already present — profile left untouched ($(wc -l < "$DSH_HOME/AGENTS.md") lines)"
 else
   cp "$REPO_DIR/install/global-AGENTS.template.md" "$DSH_HOME/AGENTS.md"
-  echo "created — the welcome interview fills it in on the first 'hola'"
+  echo "created — the welcome interview fills in the profile on the first 'hola'"
 fi
+install -m 0755 "$REPO_DIR/install/global-agents-refresh.mjs" "$DSH_HOME/global-agents-refresh.mjs"
+node "$DSH_HOME/global-agents-refresh.mjs" --home "$DSH_HOME" \
+  || echo "WARN: could not refresh the capabilities section"
+wc -l < "$DSH_HOME/AGENTS.md" | xargs -I{} echo "global AGENTS.md: {} lines (cap 25)"
 
 log "9/10 Agent skills (copy this repo's skills into $DSH_HOME/skills)"
 mkdir -p "$DSH_HOME/skills"

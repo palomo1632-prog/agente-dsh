@@ -37,6 +37,10 @@ Repo version: see the [`VERSION`](VERSION) file (currently `1.2.0`).
      `install/global-AGENTS.template.md` — DSH loads this one file in *every* session of
      *every* project. It is **never overwritten** when it already exists: the owner's
      profile (written by the welcome interview) lives there and must survive re-installs,
+   - installs `global-agents-refresh.mjs` at `~/.dsh/` and runs it, so the
+     `## Capacidades activas` section lists **only** the extras that are really active on
+     this machine (ElevenLabs/Whisper, Camoufox, residential proxy) — detection, not
+     guesswork,
    - deploys this repo's **agent skills** (`skills/`) into `~/.dsh/skills/` — today
      `crear-proyecto-harness`, which is how the agent creates, renames and removes
      harness projects on its own,
@@ -64,7 +68,9 @@ Repo version: see the [`VERSION`](VERSION) file (currently `1.2.0`).
    `scope: global` memory as backup. Nothing for you to do here — just let the owner
    know it happens on the first message. After they finish, verify with
    `cat ~/.dsh/AGENTS.md`: the `ENTREVISTA DE BIENVENIDA — PENDIENTE` marker must be
-   gone and the `## Datos del dueño` block must hold at most five short lines.
+   gone and the `## Datos del dueño` block must hold at most five short lines. Then
+   re-run `node ~/.dsh/global-agents-refresh.mjs` so `## Capacidades activas` matches
+   what is installed right now.
 6. **Optional extras**: tell the owner these exist but are NOT required to finish:
    voice notes (ElevenLabs), local Whisper, web search (Tavily), antidetect browser
    (Camoufox), residential-IP proxy. Docs for each are in `docs/`. If the owner says
